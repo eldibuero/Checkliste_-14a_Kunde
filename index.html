@@ -678,8 +678,19 @@ function buildPdfDoc(steps, imgs){
   }
   return doc;
 }
+function waitForImages(root){
+  const imgs = Array.from(root.querySelectorAll('img'));
+  return Promise.all(imgs.map(img => (img.complete && img.naturalWidth > 0)
+    ? Promise.resolve()
+    : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+}
 function printDocument(steps){
-  buildPrintDoc(document.getElementById('printDoc'), steps);
+  const root = document.getElementById('printDoc');
+  buildPrintDoc(root, steps);
+  // Fotos (Blob-URLs) müssen vollständig geladen sein, sonst fehlen sie im Ausdruck
+  waitForImages(root).then(() => runPrint());
+}
+function runPrint(){
   let blocked = false;
   try { window.print(); } catch (e) { blocked = true; }
   state.msg = blocked
