@@ -178,6 +178,23 @@ const SCHEMA = {
     { id:'gesamt', title:'Gesamtleistung', visibleIf: ANY_DEVICE, fields:[
       { id:'pel_gesamt', label:'Gesamtleistung Pel aller vorhandenen Verbrauchseinrichtungen in kW', type:'text', required:true, inputmode:'decimal', hint:'Je Gerätetyp: Anzahl × Pel je Gerät, inkl. Zusatzheizung bzw. Lastmanagement-Limit, falls angegeben', calc:true, remark:true }
     ]},
+    { id:'vollmacht', title:'Vollmacht zur Anmeldung nach § 14a EnWG', signature:true,
+      intro:[
+        'Vollmachtgeber: Anschlussnehmer bzw. Anschlussnutzer. Name, Vorname, Anschrift der Anlage und Telefon / E-Mail sind in den Kundendaten oben erfasst.',
+        'Bevollmächtigter: ELDI Elektro-Dietrich GmbH, Dachtlerstraße 18, 70499 Stuttgart, eingetragen im Installateurverzeichnis des zuständigen Netzbetreibers.',
+        'Umfang: Der Vollmachtgeber bevollmächtigt den Bevollmächtigten, für die Anlage Folgendes zu veranlassen:',
+        '1. Anmeldung der steuerbaren Verbrauchseinrichtungen beim zuständigen Netzbetreiber vor der Inbetriebnahme, mit Angaben zu Typ, Leistung, Anzahl und Steuerung (Direktansteuerung oder Energiemanagementsystem).',
+        '2. Angabe des gewünschten Netzentgelt-Moduls.',
+        '3. Beantragung bzw. Beauftragung des Einbaus von iMSys und Steuerungseinrichtung (Steuerbox) beim Messstellenbetreiber, soweit für das Modul erforderlich.',
+        '4. Abstimmung von Zählerplatz und Installation mit Netzbetreiber und Messstellenbetreiber sowie Entgegennahme der dafür nötigen Schreiben.',
+        'Nicht umfasst sind der Abschluss, die Änderung oder die Kündigung von Netzanschluss- oder Stromlieferverträgen.',
+        'Geltung: Die Vollmacht gilt bis zu ihrem schriftlichen Widerruf gegenüber dem Bevollmächtigten oder dem Netzbetreiber. Der Vollmachtgeber ist über die Verarbeitung seiner Daten im Rahmen der Anmeldung informiert (Datenschutzinformation von ELDI). Ist der Anschlussnehmer nicht identisch mit dem Anschlussnutzer, unterschreibt auch der jeweils andere.'
+      ],
+      fields:[
+        { id:'modul', label:'Gewünschtes Netzentgelt-Modul', type:'select', options:['Modul 1: pauschale Reduzierung (Standard)','Modul 2: prozentuale Reduzierung (separater Zählpunkt erforderlich)','Modul 3: zeitvariable Netzentgelte (eingebautes iMSys erforderlich)','Noch offen, bitte beraten'], required:true, remark:true },
+        { id:'vollmacht_erteilt', label:'Vollmacht zur Anmeldung erteilt?', type:'yes_no', required:true, hint:'Mit „Ja“ bestätigen Sie die Vollmacht laut Vollmachtstext. Die unterschriebene Vollmacht wird ausgedruckt und an ELDI übergeben.', remark:true },
+        { id:'vollmacht_ort', label:'Ort, Datum der Unterschrift', type:'text', required:true, remark:true }
+      ]},
     { id:'abschluss', title:'Bemerkung gesamt', fields:[
       { id:'bemerkung_gesamt', label:'Bemerkung', type:'textarea', required:false }
     ]}
@@ -344,7 +361,7 @@ function brandMark(h){
 function getSteps(){
   const steps = [{ kind:'header', title:'Kopfdaten', fields:SCHEMA.header }];
   SCHEMA.blocks.forEach(b => {
-    if (isVisible(b)) steps.push({ kind:'block', title:b.title, fields:b.fields.filter(isVisible) });
+    if (isVisible(b)) steps.push({ kind:'block', title:b.title, fields:b.fields.filter(isVisible), intro:b.intro, signature:b.signature });
   });
   steps.push({ kind:'summary' });
   return steps;
@@ -533,6 +550,7 @@ function buildPrintDocBody(target, steps){
   steps.forEach(s => {
     if (s.kind !== 'block') return;
     target.appendChild(el('h3', { class:'p-sec' }, s.title));
+    if (s.intro) s.intro.forEach(txt => target.appendChild(el('div', { class:'p-free' }, txt)));
     const onlyText = s.fields.every(f => f.type === 'textarea');
     if (onlyText) {
       s.fields.forEach(f => {
@@ -557,6 +575,16 @@ function buildPrintDocBody(target, steps){
       tb.appendChild(tr);
     });
     target.appendChild(tb);
+    if (s.signature) {
+      const sg = el('div', { style:'margin-top:34px;display:flex;gap:28px' });
+      ['Ort, Datum','Unterschrift Vollmachtgeber'].forEach(lbl => {
+        const c = el('div', { style:'flex:1' });
+        c.appendChild(el('div', { style:'height:40px;border-bottom:1px solid #333' }));
+        c.appendChild(el('div', { style:'font-size:10pt;margin-top:3px' }, lbl));
+        sg.appendChild(c);
+      });
+      target.appendChild(sg);
+    }
   });
 }
 
@@ -648,6 +676,7 @@ function buildPdfDoc(steps, imgs){
     y += 3;
     writeWrapped(s.title, M, 12, 'bold');
     doc.setDrawColor(242,140,34); doc.setLineWidth(0.4); doc.line(M, y, W - M, y); y += 3;
+    (s.intro || []).forEach(txt => writeWrapped(txt, M, 9, 'normal', [90,90,90]));
     s.fields.forEach(f => {
       ensure(12);
       writeWrapped(f.label, M + 2, 9, 'normal', [90,90,90]);
@@ -655,6 +684,15 @@ function buildPdfDoc(steps, imgs){
       if (state.remarks[f.id]) writeWrapped('Bemerkung: ' + state.remarks[f.id], M + 4, 9, 'italic', [90,90,90]);
       y += 1.5;
     });
+    if (s.signature) {
+      ensure(30); y += 14;
+      doc.setDrawColor(51,51,51); doc.setLineWidth(0.3);
+      doc.line(M, y, M + 80, y); doc.line(M + 100, y, W - M, y);
+      y += 4;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(31,31,31);
+      doc.text('Ort, Datum', M, y); doc.text('Unterschrift Vollmachtgeber', M + 100, y);
+      y += 4;
+    }
   });
 
   (imgs || []).forEach((im, idx) => {
@@ -789,6 +827,7 @@ function render(){
   } else {
     main.appendChild(el('h2', null, cur.title));
     main.appendChild(el('div', { class:'step-sub' }, 'Schritt ' + (state.step + 1) + ' von ' + total));
+    if (cur.intro) cur.intro.forEach(txt => main.appendChild(el('p', { class:'q-hint' }, txt)));
     cur.fields.forEach(f => main.appendChild(renderField(f)));
     const miss = missingIn(cur.fields);
     main.appendChild(el('div', { class:'msg err' + (state.showErrors && miss.length ? ' show' : ''), role:'alert' }, 'Bitte noch ' + miss.length + ' Pflichtfeld(er) ausfüllen.'));
